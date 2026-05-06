@@ -6,6 +6,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 public class AuctionServer {
     private final int port;
     private final int auctionDurationSeconds;
-    private final Map<String, ClientConnection> clients;
+    private final AuctionEventPublisher eventPublisher;
     private final Map<String, AuctionItem> items;
     private final ScheduledExecutorService scheduler;
     private final DecimalFormat priceFormat;
@@ -26,7 +27,7 @@ public class AuctionServer {
     public AuctionServer(int port, int auctionDurationSeconds) {
         this.port = port;
         this.auctionDurationSeconds = auctionDurationSeconds;
-        this.clients = new ConcurrentHashMap<>();
+        this.eventPublisher = new AuctionEventPublisher();
         this.items = new ConcurrentHashMap<>();
         this.scheduler = Executors.newScheduledThreadPool(2);
         this.priceFormat = (DecimalFormat) DecimalFormat.getNumberInstance(Locale.US);
@@ -72,7 +73,7 @@ public class AuctionServer {
                     }
                     clientName = handleConnect(parts, writer);
                     if (clientName != null) {
-                        broadcast("EVENT CLIENT_JOINED " + clientName, clientName);
+                        publish(AuctionEvent.broadcastExcept("EVENT CLIENT_JOINED " + clientName, clientName));
                     }
                     continue;
                 }
@@ -99,8 +100,8 @@ public class AuctionServer {
             System.out.println("Client connection error: " + e.getMessage());
         } finally {
             if (clientName != null) {
-                clients.remove(clientName);
-                broadcast("EVENT CLIENT_LEFT " + clientName, clientName);
+                eventPublisher.unregister(clientName);
+                publish(AuctionEvent.broadcastExcept("EVENT CLIENT_LEFT " + clientName, clientName));
             }
         }
     }
@@ -112,14 +113,13 @@ public class AuctionServer {
         }
 
         String candidate = parts[1];
-        if (clients.containsKey(candidate)) {
+        if (eventPublisher.contains(candidate)) {
             writer.println("ERR Name already in use.");
             return null;
         }
 
         ClientConnection connection = new ClientConnection(candidate, writer);
-        ClientConnection prev = clients.putIfAbsent(candidate, connection);
-        if (prev != null) {
+        if (!eventPublisher.register(connection)) {
             writer.println("ERR Name already in use.");
             return null;
         }
@@ -175,7 +175,7 @@ public class AuctionServer {
         }
 
         writer.println("OK Product published.");
-        broadcast("EVENT PRODUCT_PUBLISHED " + buildProductLine(item), null);
+        publish(AuctionEvent.broadcast("EVENT PRODUCT_PUBLISHED " + buildProductLine(item)));
         scheduler.schedule(() -> expireAuction(productName), auctionDurationSeconds, TimeUnit.SECONDS);
     }
 
@@ -223,17 +223,16 @@ public class AuctionServer {
 
             writer.println("OK Bid accepted. New current price: " + formatPrice(item.getCurrentPrice()) + ".");
             notifyBidInterestedUsers(item, bidder, previousBidders);
-            broadcast("EVENT BID_UPDATE " + buildProductLine(item), null);
+            publish(AuctionEvent.broadcast("EVENT BID_UPDATE " + buildProductLine(item)));
         }
     }
 
     private void notifyBidInterestedUsers(AuctionItem item, String newBidder, Set<String> previousBidders) {
         String message = "EVENT BID_NOTICE " + item.getName() + " newBid=" + formatPrice(item.getCurrentPrice()) + " bidder=" + newBidder;
 
-        sendToClient(item.getOwner(), message);
-        for (String bidderName : previousBidders) {
-            sendToClient(bidderName, message);
-        }
+        Set<String> interestedClients = new HashSet<>(previousBidders);
+        interestedClients.add(item.getOwner());
+        publish(AuctionEvent.targeted(message, interestedClients));
     }
 
     private void expireAuction(String productName) {
@@ -248,23 +247,11 @@ public class AuctionServer {
             }
             item.expire();
         }
-        broadcast("EVENT AUCTION_EXPIRED " + buildProductLine(item), null);
+        publish(AuctionEvent.broadcast("EVENT AUCTION_EXPIRED " + buildProductLine(item)));
     }
 
-    private void sendToClient(String clientName, String message) {
-        ClientConnection connection = clients.get(clientName);
-        if (connection != null) {
-            connection.send(message);
-        }
-    }
-
-    private void broadcast(String message, String excludedClient) {
-        for (ClientConnection connection : clients.values()) {
-            if (excludedClient != null && excludedClient.equals(connection.getName())) {
-                continue;
-            }
-            connection.send(message);
-        }
+    private void publish(AuctionEvent event) {
+        eventPublisher.notifyObservers(event);
     }
 
     private String formatPrice(double value) {
