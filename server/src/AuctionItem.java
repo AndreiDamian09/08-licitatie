@@ -6,6 +6,7 @@ public class AuctionItem {
     private final String owner;
     private final double minimumPrice;
     private double currentPrice;
+    private String highestBidder;
     private boolean active;
     private final Set<String> bidders;
 
@@ -14,6 +15,7 @@ public class AuctionItem {
         this.owner = owner;
         this.minimumPrice = minimumPrice;
         this.currentPrice = minimumPrice;
+        this.highestBidder = "-";
         this.active = true;
         this.bidders = new HashSet<>();
     }
@@ -34,6 +36,10 @@ public class AuctionItem {
         return currentPrice;
     }
 
+    public synchronized String getHighestBidder() {
+        return highestBidder;
+    }
+
     public synchronized boolean isActive() {
         return active;
     }
@@ -43,6 +49,7 @@ public class AuctionItem {
             return false;
         }
         currentPrice = amount;
+        highestBidder = bidder;
         bidders.add(bidder);
         return true;
     }

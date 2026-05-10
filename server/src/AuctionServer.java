@@ -54,7 +54,7 @@ public class AuctionServer {
              PrintWriter writer = new PrintWriter(socket.getOutputStream(), true)) {
 
             writer.println("WELCOME Use CONNECT <name> as first command.");
-            writer.println("INFO Commands: LIST, PUBLISH <product> <minPrice>, BID <product> <amount>, QUIT");
+            writer.println("INFO Commands: LIST, WINS, PUBLISH <product> <minPrice>, BID <product> <amount>, QUIT");
 
             String line;
             while ((line = reader.readLine()) != null) {
@@ -81,6 +81,9 @@ public class AuctionServer {
                 switch (cmd) {
                     case "LIST":
                         sendProductList(writer);
+                        break;
+                    case "WINS":
+                        sendWonProductList(clientName, writer);
                         break;
                     case "PUBLISH":
                         handlePublish(parts, clientName, writer);
@@ -138,6 +141,21 @@ public class AuctionServer {
         writer.println("END_PRODUCTS");
     }
 
+    private void sendWonProductList(String clientName, PrintWriter writer) {
+        List<AuctionItem> wonItems = new ArrayList<>();
+        for (AuctionItem item : items.values()) {
+            if (!item.isActive() && clientName.equals(item.getHighestBidder())) {
+                wonItems.add(item);
+            }
+        }
+
+        writer.println("WON_PRODUCTS " + wonItems.size());
+        for (AuctionItem item : wonItems) {
+            writer.println(buildProductLine(item));
+        }
+        writer.println("END_WON_PRODUCTS");
+    }
+
     private String buildProductLine(AuctionItem item) {
         String status = item.isActive() ? "ACTIVE" : "EXPIRED";
         return "PRODUCT "
@@ -145,6 +163,7 @@ public class AuctionServer {
                 + " owner=" + item.getOwner()
                 + " min=" + formatPrice(item.getMinimumPrice())
                 + " current=" + formatPrice(item.getCurrentPrice())
+                + " highestBidder=" + item.getHighestBidder()
                 + " status=" + status;
     }
 
@@ -207,6 +226,10 @@ public class AuctionServer {
         synchronized (item) {
             if (!item.isActive()) {
                 writer.println("ERR Product auction expired.");
+                return;
+            }
+            if (bidder.equals(item.getOwner())) {
+                writer.println("ERR Owner cannot bid on own product.");
                 return;
             }
             if (amount <= item.getCurrentPrice()) {

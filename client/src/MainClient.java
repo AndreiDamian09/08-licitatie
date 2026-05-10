@@ -30,6 +30,7 @@ public class MainClient {
             System.out.println("Type commands:");
             System.out.println("CONNECT <name>");
             System.out.println("LIST");
+            System.out.println("WINS");
             System.out.println("PUBLISH <productName> <minimumPrice>");
             System.out.println("BID <productName> <amount>");
             System.out.println("QUIT");

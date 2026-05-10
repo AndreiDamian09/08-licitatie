@@ -8,6 +8,9 @@ Aplicatie distribuita client-server pentru organizarea de licitatii, implementat
 - trimitere lista produse la conectare
 - publicare produs nou (nume unic, pret minim)
 - ofertare valida doar cu suma mai mare decat pretul curent
+- afisare ofertant castigator prin campul `highestBidder`
+- listarea produselor castigate de client prin comanda `WINS`
+- blocarea licitarii de catre proprietarul produsului
 - notificari la publicare, ofertare si expirare
 - expirare automata configurabila a licitatiilor
 - tratare erori (nume duplicat, produs inexistent/expirat, oferta invalida)
@@ -99,9 +102,14 @@ podman run --rm -it --network host auction-client localhost 5000
 
 - `CONNECT <nume>`
 - `LIST`
+- `WINS`
 - `PUBLISH <nume_produs> <pret_minim>`
 - `BID <nume_produs> <suma>`
 - `QUIT`
+
+In raspunsurile serverului, `owner` este proprietarul/vanzatorul produsului, iar `highestBidder` este clientul cu cea mai mare oferta. La finalul licitatiei, produsul ramane cu acelasi `owner`, dar castigatorul este `highestBidder`.
+
+Comanda `WINS` afiseaza doar produsele expirate castigate de clientul conectat.
 
 ## Scenariu demo rapid
 
