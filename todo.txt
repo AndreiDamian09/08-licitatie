@@ -1,0 +1,3 @@
+logurile sa fie pe partea de server
+implementat wins 
+owner bug
